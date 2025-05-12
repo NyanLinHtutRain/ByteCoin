@@ -1,11 +1,3 @@
-//
-//  CoinManager.swift
-//  ByteCoin
-//
-//  Created by Angela Yu on 11/09/2019.
-//  Copyright © 2019 The App Brewery. All rights reserved.
-//
-
 import Foundation
 
 protocol CoinManagerDelegate {
@@ -17,15 +9,15 @@ struct CoinManager {
     
     var delegate: CoinManagerDelegate?
     
-    let baseURL = "https://rest.coinapi.io/v1/exchangerate/BTC"
-    let apiKey = "YOUR_API_KEY_HERE"
+    let baseURL = "https://api.coingecko.com/api/v3/simple/price"
 
-    let currencyArray = ["AUD", "BRL","CAD","CNY","EUR","GBP","HKD","IDR","ILS","INR","JPY","MXN","NOK","NZD","PLN","RON","RUB","SEK","SGD","USD","ZAR"]
+    let currencyArray = ["AUD", "BRL", "CAD", "CNY", "EUR", "GBP", "HKD", "IDR", "ILS", "INR",
+                         "JPY", "MXN", "NOK", "NZD", "PLN", "RON", "RUB", "SEK", "SGD", "USD", "ZAR"]
     
     func getCoinPrice(for currency: String) {
         
-        let urlString = "\(baseURL)/\(currency)?apikey=\(apiKey)"
-        print(urlString)
+        let urlString = "\(baseURL)?ids=bitcoin&vs_currencies=\(currency.lowercased())"
+        print("Request URL: \(urlString)")
         
         if let url = URL(string: urlString) {
             
@@ -37,8 +29,10 @@ struct CoinManager {
                 }
                 
                 if let safeData = data {
-                    if let bitcoinPrice = self.parseJSON(safeData) {
-                        let priceString = String(format: "%.2f", bitcoinPrice)
+                    print("Response JSON: \(String(data: safeData, encoding: .utf8) ?? "")")
+                    
+                    if let price = self.parseJSON(safeData, currency: currency) {
+                        let priceString = String(format: "%.2f", price)
                         self.delegate?.didUpdatePrice(price: priceString, currency: currency)
                     }
                 }
@@ -47,19 +41,27 @@ struct CoinManager {
         }
     }
     
-    func parseJSON(_ data: Data) -> Double? {
-        
-        let decoder = JSONDecoder()
+    func parseJSON(_ data: Data, currency: String) -> Double? {
         do {
-            let decodedData = try decoder.decode(CoinData.self, from: data)
-            let lastPrice = decodedData.rate
-            print(lastPrice)
-            return lastPrice
-            
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                
+                if let error = json["status"] as? [String: Any],
+                   let message = error["error_message"] as? String {
+                    print("🚫 API Error: \(message)")
+                    return nil
+                }
+                
+                if let bitcoinData = json["bitcoin"] as? [String: Any],
+                   let price = bitcoinData[currency.lowercased()] as? Double {
+                    return price
+                } else {
+                    print("⚠️ Unexpected JSON structure.")
+                    return nil
+                }
+            }
         } catch {
             delegate?.didFailWithError(error: error)
-            return nil
         }
+        return nil
     }
-    
 }
